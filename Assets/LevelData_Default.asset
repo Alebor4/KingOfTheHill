@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 18d9bf9a69bef494da2836de4f423fd8, type: 3}
+  m_Name: LevelData_Default
+  m_EditorClassIdentifier: 
+  locationId: stone_age
+  levels:
+  - name: Moves Intro
+    mode: 1
+    timeLimitSeconds: 0
+    moveLimit: 5
+    timeOrbSpawnChance: 0
+    timeOrbMin: 0
+    timeOrbMax: 0
+  - name: Time Fast
+    mode: 0
+    timeLimitSeconds: 20
+    moveLimit: 0
+    timeOrbSpawnChance: 0
+    timeOrbMin: 0
+    timeOrbMax: 0
+  - name: Time Orbs
+    mode: 0
+    timeLimitSeconds: 10
+    moveLimit: 0
+    timeOrbSpawnChance: 0.06
+    timeOrbMin: 2
+    timeOrbMax: 5
