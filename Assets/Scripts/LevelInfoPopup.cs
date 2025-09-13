@@ -1,176 +1,137 @@
-﻿using System;
+﻿using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
-using UnityEngine.SceneManagement;
 using TMPro;
+using UnityEngine.SceneManagement;
 
 public class LevelInfoPopup : MonoBehaviour
 {
-    public enum LevelMode { Moves = 1, Timer = 2, TimerWithBonus = 3 }
+    public enum LevelMode { Moves, Timer, TimerWithBonus }
 
-    [Serializable]
-    public struct LevelConfig
+    [System.Serializable]
+    public class LevelInfo
     {
-        [Range(1, 99)] public int levelNumber;   // 1..N
-        public string displayTitle;
-        public LevelMode mode;
-
-        [Header("Параметры режима")]
-        public int moves;               // для Moves
-        public float timeSeconds;         // для Timer/TimerWithBonus
-        public float bonusSecondsPerTile; // для TimerWithBonus
-
-        [Header("Сцена уровня")]
-        public string sceneName;          // обычно "LevelScene_01"
+        [Min(1)] public int LevelNumber = 1;
+        public LevelMode Mode = LevelMode.Moves;
+        public int Moves = 5;
+        public int TimeSeconds = 10;
+        public int BonusSecondsPerTile = 2;
+        public string SceneName = "LevelScene_01";
     }
 
-    [Header("UI ссылки")]
-    [SerializeField] private GameObject root;
+    [Header("UI")]
+    [SerializeField] private RectTransform root;
+    [SerializeField] private CanvasGroup canvasGroup;
     [SerializeField] private TMP_Text titleText;
     [SerializeField] private TMP_Text descText;
     [SerializeField] private TMP_Text bestText;
     [SerializeField] private Button playButton;
     [SerializeField] private Button closeButton;
 
-    [Header("Конфигурация уровней")]
-    [SerializeField] private LevelConfig[] levels = new LevelConfig[3];
+    [Header("Config")]
+    [SerializeField] private List<LevelInfo> levels = new List<LevelInfo>();
 
-    private LevelConfig _current;
-
-    private const string PP_SelectedLevel = "KOTH_SelectedLevel";
-    private const string PP_SelectedMode = "KOTH_SelectedMode";     // 1/2/3
-    private const string PP_TimeSeconds = "KOTH_TimeSeconds";
-    private const string PP_Moves = "KOTH_Moves";
-    private const string PP_BonusSec = "KOTH_BonusSec";
+    private int _currentLevel = -1;
 
     private void Awake()
     {
-        if (root == null) root = gameObject;
+        if (!root) root = GetComponent<RectTransform>();
+        if (!canvasGroup) canvasGroup = GetComponent<CanvasGroup>();
+        if (!canvasGroup) canvasGroup = gameObject.AddComponent<CanvasGroup>();
 
-        if (closeButton != null)
+        // стартуем скрытыми, и не перехватываем клики
+        HideInstant();
+
+        if (closeButton)
         {
             closeButton.onClick.RemoveAllListeners();
-            closeButton.onClick.AddListener(() => SetActive(false));
+            closeButton.onClick.AddListener(Hide);
         }
-
-        if (playButton != null)
+        if (playButton)
         {
             playButton.onClick.RemoveAllListeners();
-            playButton.onClick.AddListener(OnPlayClicked);
-        }
-
-        SetActive(false);
-    }
-
-#if UNITY_EDITOR
-    private void OnValidate()
-    {
-        // Автофикс: если какие-то levelNumber равны 0 — назначаем 1..N
-        if (levels != null)
-        {
-            for (int i = 0; i < levels.Length; i++)
-                if (levels[i].levelNumber <= 0)
-                    levels[i].levelNumber = i + 1;
+            playButton.onClick.AddListener(OnPlayPressed);
         }
     }
-#endif
-
-    private static string BestKey(int levelNumber) => $"KOTH_Best_Level_{levelNumber}";
 
     public void ShowForLevel(int levelNumber)
     {
-        if (!TryGetConfig(levelNumber, out _current))
-        {
-            // Подстраховка: если ровно не нашли — пробуем взять по индексу (levelNumber-1)
-            if (levels != null && levels.Length >= levelNumber && levelNumber > 0)
-            {
-                _current = levels[levelNumber - 1];
+        _currentLevel = levelNumber;
 
-                // Если у элемента нулевой/неверный номер — поправим на лету
-                if (_current.levelNumber != levelNumber)
+        var data = levels.Find(l => l.LevelNumber == levelNumber);
+
+        // Заголовок
+        if (titleText) titleText.text = $"Уровень {levelNumber}";
+
+        // Описание по правилу
+        if (descText)
+        {
+            if (data != null)
+            {
+                switch (data.Mode)
                 {
-                    _current.levelNumber = levelNumber;
-                    levels[levelNumber - 1] = _current; // записали обратно в массив
+                    case LevelMode.Moves:
+                        descText.text = $"Соберите максимум очков за <b>{data.Moves}</b> ходов";
+                        break;
+                    case LevelMode.Timer:
+                        descText.text = $"Соберите максимум очков за <b>{data.TimeSeconds}</b> сек.";
+                        break;
+                    case LevelMode.TimerWithBonus:
+                        descText.text = $"Соберите максимум очков за <b>{data.TimeSeconds}</b> сек. " +
+                                        $"Бонус: +{data.BonusSecondsPerTile} сек за бонусный тайл в цепочке";
+                        break;
                 }
             }
             else
             {
-                Debug.LogError($"[LevelInfoPopup] Нет конфига для уровня {levelNumber}. " +
-                               $"Заполните массив Levels и поставьте правильные levelNumber.");
-                return;
+                descText.text = "Соберите максимум очков";
+                Debug.LogWarning($"[LevelInfoPopup] Нет конфига для уровня {levelNumber}", this);
             }
         }
 
-        // Заголовок
-        if (titleText) titleText.text = string.IsNullOrWhiteSpace(_current.displayTitle)
-            ? $"Уровень {_current.levelNumber}"
-            : _current.displayTitle;
-
-        // Описание
-        if (descText) descText.text = BuildDescription(_current);
-
-        // Личный лучший
-        int best = PlayerPrefs.GetInt(BestKey(_current.levelNumber), 0);
-        if (bestText) bestText.text = $"Личный рекорд: {best}";
-
-        SetActive(true);
-    }
-
-    private string BuildDescription(LevelConfig cfg)
-    {
-        switch (cfg.mode)
+        // Лучший результат (если нет — «—»)
+        if (bestText)
         {
-            case LevelMode.Moves:
-                return $"Набери максимум очков за {cfg.moves} ходов.";
-            case LevelMode.Timer:
-                return $"Набери максимум очков за {Mathf.CeilToInt(cfg.timeSeconds)} секунд.";
-            case LevelMode.TimerWithBonus:
-                return $"Набери максимум очков за {Mathf.CeilToInt(cfg.timeSeconds)} секунд.\n" +
-                       $"Бонус-тайлы в цепочке добавляют по {cfg.bonusSecondsPerTile:0.#} с.";
-            default:
-                return "Режим не задан.";
+            var key = $"best_l{levelNumber}";
+            bestText.text = PlayerPrefs.HasKey(key) ? $"Best: {PlayerPrefs.GetInt(key)}" : "Best: —";
         }
+
+        ShowInstant();
     }
 
-    private void OnPlayClicked()
-    {
-        // Сохраняем выбранные параметры для LevelScene_01
-        PlayerPrefs.SetInt(PP_SelectedLevel, _current.levelNumber);
-        PlayerPrefs.SetInt(PP_SelectedMode, (int)_current.mode);
-        PlayerPrefs.SetInt(PP_Moves, Mathf.Max(0, _current.moves));
-        PlayerPrefs.SetFloat(PP_TimeSeconds, Mathf.Max(0f, _current.timeSeconds));
-        PlayerPrefs.SetFloat(PP_BonusSec, Mathf.Max(0f, _current.bonusSecondsPerTile));
-        PlayerPrefs.Save();
+    public void Hide() => HideInstant();
 
-        if (string.IsNullOrEmpty(_current.sceneName))
+    private void OnPlayPressed()
+    {
+        if (_currentLevel < 1)
         {
-            Debug.LogError("[LevelInfoPopup] Не задано имя сцены уровня.");
+            Debug.LogError("[LevelInfoPopup] Уровень не выбран перед запуском.", this);
             return;
         }
 
-        SceneManager.LoadScene(_current.sceneName);
+        var data = levels.Find(l => l.LevelNumber == _currentLevel);
+        var scene = (data != null && !string.IsNullOrEmpty(data.SceneName)) ? data.SceneName : "LevelScene_01";
+
+        // Можем сохранить выбранный уровень, если нужно
+        PlayerPrefs.SetInt("selected_level", _currentLevel);
+        PlayerPrefs.Save();
+
+        SceneManager.LoadScene(scene);
     }
 
-    private bool TryGetConfig(int levelNumber, out LevelConfig cfg)
+    private void ShowInstant()
     {
-        if (levels != null)
-        {
-            for (int i = 0; i < levels.Length; i++)
-            {
-                if (levels[i].levelNumber == levelNumber)
-                {
-                    cfg = levels[i];
-                    return true;
-                }
-            }
-        }
-
-        cfg = default;
-        return false;
+        if (root) root.gameObject.SetActive(true);
+        canvasGroup.alpha = 1f;
+        canvasGroup.interactable = true;
+        canvasGroup.blocksRaycasts = true;
     }
 
-    private void SetActive(bool on)
+    private void HideInstant()
     {
-        if (root != null) root.SetActive(on);
+        if (root) root.gameObject.SetActive(true); // корень оставляем активным — управляем через CanvasGroup
+        canvasGroup.alpha = 0f;
+        canvasGroup.interactable = false;
+        canvasGroup.blocksRaycasts = false;
     }
 }
