@@ -41,3 +41,12 @@ TagManager:
   - name: Default
     uniqueID: 0
     locked: 0
+  - name: UI-BG
+    uniqueID: 1298671887
+    locked: 0
+  - name: UI-FX
+    uniqueID: 399862111
+    locked: 0
+  - name: UI-FG
+    uniqueID: 2638847579
+    locked: 0
